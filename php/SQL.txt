@@ -1,0 +1,208 @@
+배달하면 얼마 더? - PHP 실습용 SQL
+(Web-DB 예제 book/SQL.txt 의 테이블 1개(book)를 테이블 4개로 바꾼 것)
+
+테이블 4개
+- brand          : 브랜드          음식 종류(food_type)가 있어서 치킨 말고 피자·버거 브랜드도 추가 가능
+- menu           : 메뉴와 매장가   매장가 = 공식 홈페이지 권장소비자가격
+- platform       : 배달앱          default_markup = 조사 전 기본 배달가 규칙 (매장가 + 이 금액)
+- delivery_price : 메뉴 x 배달앱   is_default = 1 이면 기본값, 0 이면 직접 조사한 가격
+
+데이터 출처
+- 매장가 : 교촌치킨 공식 홈페이지 치킨 메뉴 77종의 권장소비자가격 (https://www.kyochon.com/menu/chicken.asp, 2026-10-05 확인)
+- 배달가 : 배달앱 API 를 쓸 수 없어서 아직 기본값입니다.
+           배달의민족·쿠팡이츠·요기요 = 매장가 + 2,000원, 자사앱 = 매장가
+           (근거 : 2025년 9월 서울 교촌치킨 가맹점 대부분이 배달앱 가격만 2,000원 올리고 매장·자사앱 가격은 유지했다는 보도)
+           직접 조사한 가격은 price.php(배달가 입력) 화면이나 아래 6) 의 UPDATE 문으로 바꿉니다.
+
+
+1) 새 데이터베이스 만들기
+
+- phpMyAdmin 좌측상단 '새로운' 아이콘 클릭
+- 데이터베이스명 PriceGapDB 입력 (리눅스 MySQL 은 대소문자를 구분하므로 정확히)
+- 데이터정렬방식 utf8mb4_general_ci 입력
+- '만들기' 버튼 클릭
+- 아래 2) ~ 4) 의 SQL 문을 차례로 SQL 탭에 붙여넣고 실행
+
+
+2) 데이터베이스 PriceGapDB 에 테이블 4개 생성
+
+CREATE TABLE `brand` (
+  `brand_id`   INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `name`       VARCHAR(50)  NOT NULL UNIQUE COMMENT '브랜드 (교촌치킨)',
+  `food_type`  VARCHAR(20)  NOT NULL COMMENT '음식 종류 (치킨, 피자, 버거 ...)',
+  `homepage`   VARCHAR(255) NULL COMMENT '매장가 출처 (공식 홈페이지 메뉴 페이지)',
+  `checked_on` DATE         NULL COMMENT '매장가 확인일'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `platform` (
+  `platform_id`    INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `name`           VARCHAR(30) NOT NULL UNIQUE COMMENT '배달앱 (배달의민족, 쿠팡이츠, 요기요, 자사앱)',
+  `default_markup` INT NOT NULL DEFAULT 0 COMMENT '조사 전 기본 배달가 = 매장가 + 이 금액',
+  `sort_order`     INT NOT NULL DEFAULT 0 COMMENT '화면 표시 순서'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `menu` (
+  `menu_id`     INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `brand_id`    INT NOT NULL,
+  `category`    VARCHAR(30)  NOT NULL COMMENT '분류 (공식 홈페이지 기준 : 허니시리즈 ...)',
+  `name`        VARCHAR(100) NOT NULL COMMENT '메뉴 이름',
+  `store_price` INT NOT NULL COMMENT '매장가 (공식 홈페이지 권장소비자가격)',
+  `size_info`   VARCHAR(100) NULL COMMENT '양·구성 (10호 닭, 조리 전 중량 ...)',
+  `image`       VARCHAR(255) NULL COMMENT '메뉴 이미지 주소',
+  UNIQUE KEY `uq_menu` (`brand_id`, `name`),
+  FOREIGN KEY (`brand_id`) REFERENCES `brand` (`brand_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `delivery_price` (
+  `menu_id`      INT NOT NULL,
+  `platform_id`  INT NOT NULL,
+  `price`        INT NOT NULL COMMENT '배달앱 메뉴 가격',
+  `delivery_fee` INT NULL COMMENT '배달팁 (NULL = 모름)',
+  `is_default`   BOOLEAN NOT NULL DEFAULT TRUE COMMENT '1 = 기본값(조사 전), 0 = 직접 조사',
+  `store_name`   VARCHAR(50) NULL COMMENT '조사한 매장 (예: 교촌치킨 OO점)',
+  `checked_on`   DATE NULL COMMENT '조사일',
+  PRIMARY KEY (`menu_id`, `platform_id`),
+  FOREIGN KEY (`menu_id`) REFERENCES `menu` (`menu_id`) ON DELETE CASCADE,
+  FOREIGN KEY (`platform_id`) REFERENCES `platform` (`platform_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+3) 브랜드, 배달앱, 메뉴 입력
+
+INSERT INTO `brand` (`brand_id`, `name`, `food_type`, `homepage`, `checked_on`) VALUES
+(1, '교촌치킨', '치킨', 'https://www.kyochon.com/menu/chicken.asp', '2026-10-05');
+
+INSERT INTO `platform` (`platform_id`, `name`, `default_markup`, `sort_order`) VALUES
+(1, '배달의민족', 2000, 1),
+(2, '쿠팡이츠', 2000, 2),
+(3, '요기요', 2000, 3),
+(4, '자사앱', 0, 4);
+
+INSERT INTO menu (menu_id, brand_id, category, name, store_price, size_info, image) VALUES
+(1, 1, '신메뉴', '간장윙콤비', 24000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Soy%20Sauce%20Wing%20Combo.png'),
+(2, 1, '신메뉴', '레드윙콤비', 24000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Red%20Wing%20Combo.png'),
+(3, 1, '신메뉴', '마라레드윙콤비', 24000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Mala%20Red%20Wing%20Combo.png'),
+(4, 1, '신메뉴', '허니갈릭윙콤비', 25000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Honey%20Garlic%20Wing%20Combo(3).png'),
+(5, 1, '신메뉴', '반반윙콤비[간장+레드]', 25000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Soy%20%26%20Red%20Wing%20Combo.png'),
+(6, 1, '신메뉴', '반반윙콤비[간장+마라레드]', 25000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Soy%20%26%20Mala%20Red%20Combo.png'),
+(7, 1, '신메뉴', '반반윙콤비[간장+허니갈릭]', 25000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Soy%20%26%20Honey%20Garlic%20Combo.png'),
+(8, 1, '신메뉴', '반반윙콤비[레드+마라레드]', 25000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Red%20%26%20Mala%20Red%20Combo.png'),
+(9, 1, '신메뉴', '반반윙콤비[레드+허니갈릭]', 25000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Red%20%26%20Honey%20Garlic%20Combo.png'),
+(10, 1, '신메뉴', '반반윙콤비[마라레드+허니갈릭]', 25000, '날개(윙)+정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Mala%20Red%20%26%20Honey%20Garlic%20Combo.png'),
+(11, 1, '신메뉴', '허니갈릭한마리', 22000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_hg_whole.png'),
+(12, 1, '신메뉴', '마라레드한마리', 22000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_mala.png'),
+(13, 1, '윙박스시리즈', '간장윙박스20PCS', 23000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_10_soy-wingbox-20p(1).png'),
+(14, 1, '윙박스시리즈', '레드윙박스20PCS', 23000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_11_red-wingbox-20p(1).png'),
+(15, 1, '윙박스시리즈', '마라레드윙박스20PCS', 23000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_09_mara-red-wingbox-20p(1).png'),
+(16, 1, '윙박스시리즈', '허니갈릭윙박스20PCS', 23000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_08_honey-garlic-wingbox-20p(1).png'),
+(17, 1, '윙박스시리즈', '후라이드윙박스20PCS', 23000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_Fied_wing.png'),
+(18, 1, '윙박스시리즈', '양념치킨윙박스20PCS', 24000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_14_seasoned-chicken-wingbox-20p(1).png'),
+(19, 1, '윙박스시리즈', '허니윙박스20PCS', 23000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_12_honey-wingbox-20p(1).png'),
+(20, 1, '윙박스시리즈', '반반윙박스20PCS[간장+마라레드]', 24000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/11_hnh_wb_20p_soy_mala.png'),
+(21, 1, '윙박스시리즈', '반반윙박스20PCS[간장+허니갈릭]', 24000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/12_hnh_wb_20p_soy_hg.png'),
+(22, 1, '윙박스시리즈', '반반윙박스20PCS[레드+마라레드]', 24000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/13_hnh_wb_20p_red_mala.png'),
+(23, 1, '윙박스시리즈', '반반윙박스20PCS[레드+허니갈릭]', 24000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/14_hnh_wb_20p_red+hg.png'),
+(24, 1, '윙박스시리즈', '반반윙박스20PCS[마라레드+허니갈릭]', 24000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/15_hnh_wb_20p_mala_hg.png'),
+(25, 1, '윙박스시리즈', '반반윙박스20PCS[후라이드+양념]', 24000, '윙+봉 20조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/16_harf.png'),
+(26, 1, '윙박스시리즈', '허니갈릭윙박스16PCS', 22000, '윙+봉 16조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_hg_wb_16p.png'),
+(27, 1, '윙박스시리즈', '마라레드윙박스16PCS', 22000, '윙+봉 16조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_%EB%A7%88%EB%9D%BC%EB%A0%88%EB%93%9C%EC%9C%99%EB%B0%95%EC%8A%A4.png'),
+(28, 1, '윙박스시리즈', '간장윙박스16PCS', 22000, '윙+봉 16조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_%EA%B0%84%EC%9E%A5%EC%9C%99%EB%B0%95%EC%8A%A4.png'),
+(29, 1, '윙박스시리즈', '레드윙박스16PCS', 22000, '윙+봉 16조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/lsti_%EB%A0%88%EB%93%9C%EC%9C%99%EB%B0%95%EC%8A%A4.png'),
+(30, 1, '윙박스시리즈', '허니윙박스16PCS', 22000, '윙+봉 16조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%ED%97%88%EB%8B%88%EC%9C%99(3).png'),
+(31, 1, '윙박스시리즈', '후라이드윙박스16PCS', 22000, '윙+봉 16조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%ED%9B%84%EB%9D%BC%EC%9D%B4%EB%93%9C%EC%9C%99(3).png'),
+(32, 1, '윙박스시리즈', '양념치킨윙박스16PCS', 23000, '윙+봉 16조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_%EC%96%91%EB%85%90%EC%B9%98%ED%82%A8%EC%9C%99.png'),
+(33, 1, '싱글윙시리즈', '허니갈릭싱글윙', 8500, '윙+봉 6조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_hg_single_wing.png'),
+(34, 1, '싱글윙시리즈', '마라레드싱글윙', 7900, '윙+봉 6조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%A7%88%EB%9D%BC%EB%A0%88%EB%93%9C%EC%8B%B1%EA%B8%80%EC%9C%99_list.png'),
+(35, 1, '싱글윙시리즈', '간장싱글윙', 7900, '윙+봉 6조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%EA%B0%84%EC%9E%A5%EC%8B%B1%EA%B8%80%EC%9C%99.png'),
+(36, 1, '싱글윙시리즈', '레드싱글윙', 7900, '윙+봉 6조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%EB%A0%88%EB%93%9C%EC%8B%B1%EA%B8%80%EC%9C%99.png'),
+(37, 1, '싱글윙시리즈', '허니싱글윙', 7900, '윙+봉 6조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%ED%97%88%EB%8B%88%EC%8B%B1%EA%B8%80%EC%9C%99(3).png'),
+(38, 1, '싱글윙시리즈', '후라이드싱글윙', 7900, '윙+봉 6조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%ED%9B%84%EB%9D%BC%EC%9D%B4%EB%93%9C%EC%8B%B1%EA%B8%80%EC%9C%99(3).png'),
+(39, 1, '싱글윙시리즈', '양념치킨싱글윙', 8500, '윙+봉 6조각', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%EC%96%91%EB%85%90%EC%8B%B1%EA%B8%80%EC%9C%99.png'),
+(40, 1, '허니시리즈', '허니한마리', 19000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EA%B5%90%EC%B4%8C-%ED%97%88%EB%8B%88-%EC%98%A4%EB%A6%AC.png'),
+(41, 1, '허니시리즈', '허니콤보', 23000, '날개(윙+봉)+다리 · 조리 전 880g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EA%B5%90%EC%B4%8C-%ED%97%88%EB%8B%88-%EC%BD%A4%EB%B3%B4(1).png'),
+(42, 1, '허니시리즈', '허니순살', 23000, '정육+안심 · 조리 전 500g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%ED%97%88%EB%8B%88%EC%88%9C%EC%82%B4.png'),
+(43, 1, '후라이드시리즈', '후라이드한마리', 21000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/fliied1.png'),
+(44, 1, '후라이드시리즈', '양념치킨한마리', 22000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_%EC%96%91%EB%85%90%EC%B9%98%ED%82%A8%ED%95%9C%EB%A7%88%EB%A6%AC.png'),
+(45, 1, '후라이드시리즈', '후라이드양념반반한마리', 22000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/harf1.png'),
+(46, 1, '후라이드시리즈', '후라이드순살', 22000, '정육+안심 · 조리 전 500g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_%ED%9B%84%EB%9D%BC%EC%9D%B4%EB%93%9C%EC%88%9C%EC%82%B4.png'),
+(47, 1, '후라이드시리즈', '양념치킨순살', 23000, '정육+안심 · 조리 전 500g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_%EC%96%91%EB%85%90%EC%88%9C%EC%82%B4.png'),
+(48, 1, '후라이드시리즈', '후라이드양념반반순살', 23000, '정육+안심 · 조리 전 500g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_%ED%9B%84%EB%9D%BC%EC%9D%B4%EB%93%9C%EC%96%91%EB%85%90%EC%88%9C%EC%82%B4.png'),
+(49, 1, '허니옥수수', '허니옥수수순살', 23000, '정육+안심 · 조리 전 500g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%ED%97%88%EB%8B%88%EC%98%A5%EC%88%98%EC%88%9C%EC%82%B4.png'),
+(50, 1, '허니옥수수', '허니옥수수한마리', 20000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%EA%B5%90%EC%B4%8C%EC%98%A5%EC%88%98%EC%88%98%EC%98%A4%EB%A6%AC%EC%A7%80%EB%82%A0.png'),
+(51, 1, '간장시리즈', '간장한마리', 19000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EA%B0%84%EC%9E%A5%ED%95%9C%EB%A7%88%EB%A6%AC_list.png'),
+(52, 1, '간장시리즈', '간장콤보', 22000, '날개(윙+봉)+다리 · 조리 전 920g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%B8%8C%EB%9E%9C%EB%93%9C_list_15-10-231103.png'),
+(53, 1, '간장시리즈', '간장순살', 22000, '정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%EA%B0%84%EC%9E%A5%EC%88%9C%EC%82%B4.png'),
+(54, 1, '간장시리즈', '간장스틱', 22000, '다리 · 조리 전 920g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EA%B5%90%EC%B4%8C%EC%8A%A4%ED%8B%B1_list.png'),
+(55, 1, '레드시리즈', '레드한마리', 20000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%A0%88%EB%93%9C%ED%95%9C%EB%A7%88%EB%A6%AC_list.png'),
+(56, 1, '레드시리즈', '레드콤보', 23000, '날개(윙+봉)+다리 · 조리 전 920g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%B8%8C%EB%9E%9C%EB%93%9C_list_15-10-231098.png'),
+(57, 1, '레드시리즈', '레드순살', 23000, '정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%EB%A0%88%EB%93%9C%EC%88%9C%EC%82%B4.png'),
+(58, 1, '레드시리즈', '레드스틱', 23000, '다리 · 조리 전 920g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%A0%88%EB%93%9C%EC%8A%A4%ED%8B%B1_list(0).png'),
+(59, 1, '반반시리즈', '반반한마리[간장+레드]', 20000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%B0%98%EB%B0%98%ED%95%9C%EB%A7%88%EB%A6%AC_list(3).png'),
+(60, 1, '반반시리즈', '반반한마리[마라레드+허니갈릭]', 22000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_hnh_whole_mala_hg.png'),
+(61, 1, '반반시리즈', '반반한마리[레드+허니갈릭]', 22000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_hnh_whole_red_hg.png'),
+(62, 1, '반반시리즈', '반반한마리[간장+허니갈릭]', 22000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_hnh_whole_soy_hg.png'),
+(63, 1, '반반시리즈', '반반한마리[간장+마라레드]', 22000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_soy_mala.png'),
+(64, 1, '반반시리즈', '반반한마리[레드+마라레드]', 22000, '10호 닭 (951~1,050g)', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list_red_mala(1).png'),
+(65, 1, '반반시리즈', '반반콤보[간장+레드]', 23000, '날개(윙+봉)+다리 · 조리 전 920g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%B8%8C%EB%9E%9C%EB%93%9C_list_15-10-231107.png'),
+(66, 1, '반반시리즈', '반반순살[간장+레드]', 23000, '정육 · 조리 전 700g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%EB%B0%98%EB%B0%98%EC%88%9C%EC%82%B4_(%EA%B0%84%EC%9E%A5+%EB%A0%88%EB%93%9C).png'),
+(67, 1, '반반시리즈', '반반스틱[간장+레드]', 23000, '다리 · 조리 전 920g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%B0%98%EB%B0%98%EC%8A%A4%ED%8B%B1_list.png'),
+(68, 1, '반반시리즈', '반반순살[레드+허니]', 23000, '정육+안심 · 조리 전 600g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/list-%EB%B0%98%EB%B0%98%EC%88%9C%EC%82%B4(%EB%A0%88%EB%93%9C+%ED%97%88%EB%8B%88).png'),
+(69, 1, '살살시리즈', '살살후라이드', 20000, '정육+가슴살 · 조리 전 630g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%B8%8C%EB%9E%9C%EB%93%9C_list_15-10-221035.png'),
+(70, 1, '살살시리즈', '파채소이살살', 19000, '정육+가슴살 · 조리 전 420g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%B8%8C%EB%9E%9C%EB%93%9C_list_15-10-221025.png'),
+(71, 1, '반마리(S)', '간장콤보[S]', 12000, '다리+윙+봉 · 조리 전 460g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/30148_%EA%B5%90%EC%B4%8C%EC%BD%A4%EB%B3%B4s_list.png'),
+(72, 1, '반마리(S)', '간장순살[S]', 12000, '정육 · 조리 전 350g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/38393_%EA%B5%90%EC%B4%8C%EC%88%9C%EC%82%B4s_list.png'),
+(73, 1, '반마리(S)', '간장스틱[S]', 12000, '다리 · 조리 전 460g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/30084_%EA%B5%90%EC%B4%8C%EC%8A%A4%ED%8B%B1s_list.png'),
+(74, 1, '반마리(S)', '레드콤보[S]', 13000, '날개(윙+봉)+다리 · 조리 전 460g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%EB%A0%88%EB%93%9C%EC%BD%A4%EB%B3%B4%5BS%5D_list.png'),
+(75, 1, '반마리(S)', '레드순살[S]', 13000, '정육 · 조리 전 350g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/38394_%EB%A0%88%EB%93%9C%EC%88%9C%EC%82%B4s_list.png'),
+(76, 1, '반마리(S)', '레드스틱[S]', 13000, '다리 · 조리 전 460g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/30020_%EB%A0%88%EB%93%9C%EC%8A%A4%ED%8B%B1s_list.png'),
+(77, 1, '반마리(S)', '허니순살[S]', 13000, '정육+안심 · 조리 전 250g', 'https://www.kyochon.com/uploadFiles/TB_ITEM/%ED%97%88%EB%8B%88%EC%88%9C%EC%82%B4s_list-(3).png');
+
+
+4) 배달가 기본값 만들기 : 모든 메뉴 x 모든 배달앱 (77 x 4 = 308개)
+
+INSERT IGNORE INTO `delivery_price` (`menu_id`, `platform_id`, `price`, `is_default`)
+SELECT m.`menu_id`, p.`platform_id`, m.`store_price` + p.`default_markup`, TRUE
+FROM `menu` m CROSS JOIN `platform` p;
+
+※ INSERT IGNORE : 이미 있는 (메뉴, 배달앱) 조합은 건너뜀
+   → 메뉴나 배달앱을 SQL 로 추가한 뒤 이 문장을 다시 실행하면 빠진 기본값만 채워짐 (직접 조사한 값은 그대로)
+
+
+5) 확인
+
+SELECT COUNT(*) FROM `delivery_price`;
+
+SELECT m.`name`, m.`store_price` AS 매장가, p.`name` AS 배달앱, d.`price` AS 배달가,
+       d.`price` - m.`store_price` AS 차액, d.`is_default` AS 기본값
+FROM `delivery_price` d
+JOIN `menu` m ON m.`menu_id` = d.`menu_id`
+JOIN `platform` p ON p.`platform_id` = d.`platform_id`
+WHERE m.`name` = '허니콤보'
+ORDER BY p.`sort_order`;
+
+
+6) 나중에 확장할 때 (필요할 때만 실행)
+
+- 직접 조사한 배달가 입력 (화면 : price.php) : menu_id 41 = 허니콤보, platform_id 1 = 배달의민족
+UPDATE `delivery_price`
+SET `price` = 25000, `delivery_fee` = 3000, `is_default` = FALSE, `store_name` = '교촌치킨 OO점', `checked_on` = '2026-10-06'
+WHERE `menu_id` = 41 AND `platform_id` = 1;
+
+- 배달앱 추가 → 4) 다시 실행
+INSERT INTO `platform` (`name`, `default_markup`, `sort_order`) VALUES ('땡겨요', 0, 5);
+
+- 다른 브랜드·음식 추가 (화면 : insert.php 에서 처음 보는 브랜드 이름을 입력해도 됨) → 4) 다시 실행
+INSERT INTO `brand` (`name`, `food_type`, `homepage`, `checked_on`) VALUES ('OO피자', '피자', 'https://...', '2026-10-06');
+INSERT INTO `menu` (`brand_id`, `category`, `name`, `store_price`, `size_info`) VALUES (2, '프리미엄', '포테이토 피자 L', 30000, 'L');
+
+- 기본값 규칙(default_markup)을 바꾼 뒤, 아직 조사하지 않은 칸만 새 규칙으로 다시 계산
+UPDATE `delivery_price` d
+JOIN `menu` m ON m.`menu_id` = d.`menu_id`
+JOIN `platform` p ON p.`platform_id` = d.`platform_id`
+SET d.`price` = m.`store_price` + p.`default_markup`
+WHERE d.`is_default` = TRUE;
+
+
+7) 처음부터 다시 만들기 (주의 : 직접 조사해 입력한 가격도 모두 지워짐) → 2) 부터 다시 실행
+
+DROP TABLE IF EXISTS `delivery_price`, `menu`, `platform`, `brand`;
