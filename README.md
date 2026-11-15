@@ -118,6 +118,7 @@ phpMyAdmin 에서 바로 고쳐도 됩니다 (`is_default`를 0으로, `checked_
 price-gap/
 ├─ README.md            이 문서 (주제, 테이블, 데이터, 조사 방법)
 ├─ 발표자료.pptx         10/6 발표 : PHP 예제 분석 및 수정 (발표자 노트 포함)
+├─ 테스트계획_발표자료.pptx 11/17 발표 : 사용성 테스트 계획 (태스크 T1~T3, 로그, 설문)
 ├─ 사용성평가_구글폼.gs   사용성 테스트용 구글 폼 2개를 만드는 Apps Script
 ├─ data/
 │  ├─ BHC.sql            BHC 185메뉴 + 배달가 (5-1)
