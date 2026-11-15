@@ -86,6 +86,9 @@ search.php ──include──▶ selectSQL.php          select * from book wher
    sudo touch log.txt && sudo chmod 666 log.txt
    ```
 5. **접속** : `http://IP주소/price-gap/php/` (자동으로 search.php)
+   > `:8080` 은 OTT Cart 때 쓴 Tomcat(JSP) 주소라서 PHP 가 실행되지 않습니다. PHP 는 Apache(80번 포트, 주소에 포트 없음)로 접속합니다.
+   > 강의자료 예제 `http://IP주소/Web-DB/book/php/search.php` 가 열리는 폴더(`/home/project/`)에 함께 두면 됩니다.
+   > Tomcat 의 `webapps` 폴더에 넣으면 PHP 파일이 글자 그대로 내려가서 `SQLconstants.php` 의 DB 비밀번호까지 보이니 넣지 마세요.
 6. **로그 확인** : `tail -f log.txt` 를 띄워 두고 검색·입력·삭제를 하며 Action 별로 줄이 쌓이는지 확인
 
 > mysqli 가 없다는 오류가 나면 `sudo apt install php-mysql` 후 `sudo systemctl restart apache2`.

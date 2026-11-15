@@ -1,10 +1,11 @@
 # 배달하면 얼마 더? — 매장가 vs 배달앱 가격 비교
 
 26-2 웹서버개발 팀 C. 같은 메뉴를 매장에서 살 때와 배달앱으로 시킬 때 가격이 얼마나 다른지 보여 주는 사이트입니다.
-지금은 **교촌치킨 치킨 메뉴 77종**으로 만든 프로토타입이고, 테이블은 **4개**만 씁니다.
+**교촌치킨 치킨 메뉴 77종**으로 시작한 프로토타입이고, 테이블은 **4개**만 씁니다.
+2026-11-15에 팀원이 조사한 **BHC 185종**과 **한솥도시락 115종**을 더해 지금은 브랜드 3곳, 메뉴 377종입니다.
 
 - PHP 코드와 발표용 예제 분석 : [`php/README.md`](php/README.md)
-- DB 만들기 : [`php/SQL.txt`](php/SQL.txt)
+- DB 만들기 : [`php/SQL.txt`](php/SQL.txt) → 브랜드 추가 : [`data/`](data/) (아래 5-1)
 
 ---
 
@@ -93,11 +94,34 @@ phpMyAdmin 에서 바로 고쳐도 됩니다 (`is_default`를 0으로, `checked_
 
 ---
 
+## 5-1. 추가 브랜드 데이터 (`data/`)
+
+| 파일 | 브랜드 | 메뉴 | 배달앱 가격 |
+|---|---|---|---|
+| `data/BHC.sql` | BHC (치킨) | 185 | 740행 : 115메뉴는 요기요 조사가를 배민·쿠팡이츠·요기요에 같이 입력(`is_default=0`), 70메뉴는 기본값 |
+| `data/hansot_import.sql` | 한솥도시락 (도시락) | 115 | 460행 : 114메뉴는 요기요(상암) 조사가를 세 앱에 같이 입력(`is_default=0`), 나머지는 기본값 |
+
+- 두 파일 모두 테이블을 새로 만들지 않고 기존 4개 테이블에 행만 넣습니다. 트랜잭션으로 묶여 있고, 이미 직접 조사한 가격은 덮어쓰지 않습니다.
+- **주의** : 배민·쿠팡이츠 가격은 각 앱에서 따로 조사한 값이 아니라 요기요 값을 그대로 쓴 것입니다.
+- 실행 (SQL.txt 다음에, 순서 무관) :
+  ```bash
+  sudo mysql --default-character-set=utf8mb4 PriceGapDB < data/BHC.sql
+  sudo mysql --default-character-set=utf8mb4 PriceGapDB < data/hansot_import.sql
+  ```
+  `BHC.sql` 에는 `SET NAMES utf8mb4` 가 없어서 `--default-character-set=utf8mb4` 를 꼭 붙여야 한글이 안 깨집니다.
+
+---
+
 ## 6. 폴더 구조
 
 ```
 price-gap/
 ├─ README.md            이 문서 (주제, 테이블, 데이터, 조사 방법)
+├─ 발표자료.pptx         10/6 발표 : PHP 예제 분석 및 수정 (발표자 노트 포함)
+├─ 사용성평가_구글폼.gs   사용성 테스트용 구글 폼 2개를 만드는 Apps Script
+├─ data/
+│  ├─ BHC.sql            BHC 185메뉴 + 배달가 (5-1)
+│  └─ hansot_import.sql  한솥도시락 115메뉴 + 배달가 (5-1)
 └─ php/
    ├─ README.md         예제 분석·수정 내용, 서버 실행 방법, 시연 순서 (발표용)
    ├─ SQL.txt           DB 만들기 : 테이블 4개 + 교촌치킨 77메뉴 + 기본 배달가
