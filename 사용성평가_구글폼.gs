@@ -3,6 +3,7 @@
  *   createTaskForm        : 태스크 수행 기록 (태스크를 하면서 답 · 난이도 기록)
  *   createUsabilityForm   : 사용성 평가 설문 (태스크를 모두 마친 뒤 10문항 + 서술)
  *   convertExistingForms  : 이미 만든 두 설문(기본/개선 2개 사이트용)을 사이트 1개용으로 바꾸기
+ *   setNameExample        : 이미 만든 두 설문의 '학번이름' 입력 예시를 NAME_EXAMPLE 로 바꾸기
  * 두 설문은 '학번이름'으로 같은 참가자를 연결한다.
  *
  * 사용법
@@ -17,6 +18,8 @@ const SITE = 'http://52.55.137.81/price-gap/php/search.php';   // 테스트할 �
 // 이미 만든 설문 (2026-11-14 생성)
 const TASK_FORM_ID      = '1ROUU-NlgU3TrDWxuMHTKi8IMHSTPRLHxPCNqrWOR1ao';
 const USABILITY_FORM_ID = '1kgZLO77p7K5NfDJklgjzaRf334UvkhlFZS2rK1I_9Cs';
+
+const NAME_EXAMPLE = '예: 202911999 홍길동';   // 학번이름 입력 예시
 
 const TASKS =
   'T1  친구들과 허니콤보를 시키려고 해요. 어느 앱이 가장 싸고, 다른 앱은 매장보다 얼마나 더 내야 하나요?\n' +
@@ -61,7 +64,7 @@ function createTaskForm() {
   form.setProgressBar(true);
 
   form.addSectionHeaderItem().setTitle('참가자');
-  form.addTextItem().setTitle('학번이름').setHelpText('예: 202211091 이성민 — 사용성 평가 설문과 연결하는 데 사용').setRequired(true);
+  form.addTextItem().setTitle('학번이름').setHelpText(NAME_EXAMPLE + ' — 사용성 평가 설문과 연결하는 데 사용').setRequired(true);
   form.addMultipleChoiceItem().setTitle('참여 기기').setChoiceValues(['PC', '휴대폰']).setRequired(true);
 
   form.addPageBreakItem().setTitle(TASK_PAGE).setHelpText(TASK_HELP);
@@ -85,7 +88,7 @@ function createUsabilityForm() {
   form.setProgressBar(true);
 
   form.addSectionHeaderItem().setTitle('참가자');
-  form.addTextItem().setTitle('학번이름').setHelpText('예: 202211091 이성민').setRequired(true);
+  form.addTextItem().setTitle('학번이름').setHelpText(NAME_EXAMPLE).setRequired(true);
   form.addMultipleChoiceItem().setTitle('배달앱으로 음식을 주문하는 빈도')
       .setChoiceValues(['거의 안 함', '한 달에 1~2번', '일주일에 1~2번', '일주일에 3번 이상']).setRequired(true);
 
@@ -132,6 +135,19 @@ function convertForm_(id, desc, pageTitle, pageHelp, dropTitles) {
   remove.reverse().forEach(function (item) { form.deleteItem(item); });
   Logger.log(form.getTitle() + ' : 문항 ' + remove.length + '개 삭제, 남은 문항 ' + form.getItems().length + '개');
   form.getItems().forEach(function (item) { Logger.log('  - ' + item.getTitle()); });
+}
+
+// ------------------------------------------------------------------ 4. 학번이름 입력 예시 바꾸기
+function setNameExample() {
+  [TASK_FORM_ID, USABILITY_FORM_ID].forEach(function (id) {
+    const form = FormApp.openById(id);
+    form.getItems().forEach(function (item) {
+      if (item.getTitle() !== '학번이름') return;
+      const rest = item.getHelpText().replace(/^예: [^—]*/, '').trim();   // '— 사용성 평가 설문과 …' 부분은 그대로
+      item.setHelpText(NAME_EXAMPLE + (rest ? ' ' + rest : ''));
+      Logger.log(form.getTitle() + ' : ' + item.getHelpText());
+    });
+  });
 }
 
 // ------------------------------------------------------------------ 응답 시트 연결 · 주소 출력
